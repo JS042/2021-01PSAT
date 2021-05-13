@@ -1,0 +1,188 @@
+---
+title: "2주차 과제"
+author: "위재성"
+output: html_document
+---
+
+## Chapter 1
+
+### 문제 0
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(data.table)
+library(VIM)
+
+setwd("D:/WJS/Documents/package/2st week")
+data <- fread("data.csv",stringsAsFactors = T)
+```
+
+### 문제 1
+```{r}
+data <- data %>% 
+  dplyr::select(-ends_with('2'))
+```
+
+### 문제 2
+```{r}
+aggr(data,prop=F,numbers=T,col=c('lightyellow','pink'))
+```
+
+왼쪽 그래프는 각 변수별 결측치(NA) 수를 나타냅니다.  
+OC변수는 결측치가 없는 반면 ownerChange변수는 결측치가 12개로 가장 많네요.  
+  
+오른쪽 그래프는 결측치들의 조합을 나타냅니다.  
+결측치가 없는 조합은 279개이고 employee1과 ownerChange에만 결측치가 있는 조합은 총 7개군요.
+
+### 문제 3-1
+```{r warning=FALSE}
+data<-data %>% 
+  lapply(function(x) replace_na(x,mean(x,na.rm=T)))
+```
+
+### 문제 3-2
+```{r}
+data$ownerChange <- data$ownerChange %>%
+  replace_na(names(which.max(table(data$ownerChange))))
+```
+
+### 문제 4
+```{r}
+data$OC <-ifelse(data$OC == 'open', 1,0)
+data$OC <- as.factor(data$OC)
+```
+
+### 문제 5
+```{r}
+data<-data %>% 
+  lapply(function(x) 
+    if(class(x)=='integer64') as.numeric(x) else(x)) %>% 
+  as.data.frame
+```
+
+
+## Chapter 2
+
+### 문제 1
+```{r message=FALSE, warning=FALSE}
+library(caret)
+library(MLmetrics)
+library(randomForest)
+```
+
+```{r}
+set.seed(1234)
+train_idx <- createDataPartition(data$OC,p=0.7,list=F)
+train <- data[train_idx,]
+valid <- data[-train_idx,]
+```
+
+### 문제 2
+```{r warning=FALSE}
+glm <- glm(OC ~., data=train,family=binomial)
+pred_glm <- ifelse(predict(glm,valid)>=0.5, 1, 0)
+Accuracy(pred_glm,valid$OC)
+```
+
+### 문제 3
+```{r warning=FALSE}
+step <- step(glm, direction = 'both')
+pred_step <- ifelse(predict(step,valid)>0.5, 1, 0)
+Accuracy(pred_step,valid$OC)
+```
+
+### 문제 4
+```{r}
+acc_rf <- expand.grid(mtry=3:5,acc=NA)
+```
+
+### 문제 5
+```{r}
+set.seed(1234)
+split_ind = createFolds(data$OC,k=5)
+accuracy=c()
+for (i in 3:5){
+  for (j in 1:5){
+    s_train = data[-split_ind[[j]],]
+    s_test = data[split_ind[[j]],]
+    rf <- randomForest(step$formula, ntree=10, mtry=i,data=s_train,importance=T)
+    pred_test = predict(rf,s_test)
+    accuracy[j] = Accuracy(pred_test,s_test$OC)
+  } 
+  acc_rf$acc[i-2] = mean(accuracy)
+}
+```
+
+### 문제 6
+```{r}
+(result = acc_rf %>% filter(acc==max(acc)))
+```
+
+### 문제 7
+```{r}
+library(ggplot2)
+set.seed(1234)
+rf <- randomForest(step$formula, ntree=10 ,mtry=result$mtry, data=train,importance=T)
+imp=as.data.frame(varImpPlot(rf))
+
+imp %>% ggplot(aes(x=reorder(rownames(imp),MeanDecreaseGini),y=MeanDecreaseGini)) +
+  geom_point(color='pink') +
+  geom_segment(aes(x=rownames(imp),xend=rownames(imp),y=0,yend=MeanDecreaseGini),color='pink') +
+  xlab('Variable Name') +
+  coord_flip() +
+  theme_classic()
+```
+
+noe1은 MeanDecreaseGini가 가장 높습니다. 즉, noe1이 모델에 적용됨으로써 분류모델의 불순도를 가장 많이 줄인다는 걸 의미합니다. 
+
+## Chapter 3
+
+### 문제 1
+```{r}
+library(MASS)
+set.seed(1234)
+train_index0 <- createDataPartition(Boston$medv,p=0.8,list=F)
+train0 <- Boston[train_index0,]
+test0 <- Boston[-train_index0,]
+```
+
+### 문제 2
+```{r}
+ntree=c(10,100,200)
+RMSE_rf <- expand.grid(mtry=3:5,ntree=c(10,100,200),RMSE=NA)
+```
+
+### 문제 3
+```{r}
+set.seed(1234)
+split_ind0 = createFolds(Boston$medv,k=5)
+rmse0=c()
+for (i in 3:5){
+  for(k in 1:3){
+    for(j in 1:5){
+    s_train0 = Boston[-split_ind[[j]],]
+    s_test0 = Boston[split_ind[[j]],]
+    rf0 <- randomForest(medv~., data=s_train0, mtry=i, ntree=ntree[k])
+    pred_s_test0 = predict(rf0,s_test0)
+    rmse0[j] = RMSE(pred_s_test0,s_test0$medv)
+      }
+  RMSE_rf[which(RMSE_rf$mtry==i),'RMSE'][k] = mean(rmse0)
+    }
+  }
+```
+
+### 문제 4
+```{r}
+(result2 = RMSE_rf %>% filter(RMSE==min(RMSE)))
+```
+
+### 문제 5
+```{r}
+set.seed(1234)
+rf00 <- randomForest(medv~., data=train0, mtry=result2$mtry, ntree=result2$ntree)
+pred_test0 = predict(rf0,test0)
+RMSE(pred_test0,test0$medv)
+```
+
+
+
+

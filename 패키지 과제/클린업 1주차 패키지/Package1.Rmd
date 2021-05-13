@@ -1,0 +1,241 @@
+---
+title: "1주차 패키지"
+author: "위재성"
+
+output: html_document
+---
+
+## Chapter 1
+
+### 문제 0
+
+```{r}
+library(plyr)
+library(tidyverse)
+library(data.table)
+setwd("D:/WJS/Documents/package/1st week")
+Dat = fread("data.csv")
+```
+
+### 문제 1
+
+```{r}
+str(Dat)
+colSums(is.na(Dat))
+sapply(Dat, function(x) unique(x))
+sapply(Dat, function(x) length(unique(x)))
+```
+
+
+### 문제 2-1
+```{r}
+Dat1 <- Dat %>% filter(!is.na(confirmed_date))
+```
+
+### 문제 2-2
+```{r}
+Dat1 <- Dat1[-which(Dat1$sex == "" | Dat1$age == "" | Dat1$city == ""),]
+```
+
+### 문제 3
+```{r}
+Dat1 <- Dat1 %>% 
+  filter(country=="Korea") %>% 
+  select(!country)
+  
+```
+
+### 문제 4
+```{r}
+Dat1$province <-  
+  case_when(Dat1$province=="서울"~"서울특별시",
+            Dat1$province=="부산"~"부산광역시",
+            Dat1$province=="대구"~"대구광역시",
+            Dat1$province=="인천"~"인천광역시",
+            Dat1$province=="대전"~"대전광역시",
+            Dat1$province=="세종"~"세종특별자치시",
+            Dat1$province=="울산"~"울산광역시",
+            Dat1$province=="제주도"~"제주특별자치도",
+            TRUE ~ Dat1$province)
+```
+
+### 문제 5
+```{r}
+Dat1$confirmed_date <- as.Date(Dat1$confirmed_date)
+```
+
+### 문제 6
+```{r}
+Dat1 <- Dat1 %>% 
+  group_by(confirmed_date) %>% 
+  mutate(confirmed_number = n())
+```
+
+### 문제 7
+```{r}
+Dat1 <- Dat1 %>% 
+  mutate(wday = ifelse(weekdays(confirmed_date) == "일요일" | weekdays(confirmed_date) == "토요일", "주말", "주중"))
+```
+
+### 문제 8
+```{r}
+Dat_age_date<- Dat1 %>% 
+  group_by(age,confirmed_date) %>% 
+  summarise(n=n())
+tapply(Dat_age_date$n, Dat_age_date$age, summary)
+```
+
+
+## Chapter 2
+
+### 문제 1
+``` {r}
+Dat2 <- Dat1 %>% group_by(confirmed_date) %>% 
+  summarise(n = n()) %>% 
+  filter(n ==max(n))
+```
+날짜 별 확진자 수를 구한 뒤 확진자 수가 최대로 나온 날짜와 확진자 수 구함
+
+
+```{r}
+text <- paste(Dat2$confirmed_date, "(", Dat2$n, "명)",sep="") 
+```
+최대 확진자에 대한 정보 text라는 변수에 저장
+
+```{r}
+ggplot(Dat1,aes(x=confirmed_date, y=confirmed_number)) +
+  geom_line(color = "lightblue") +
+  labs(title = "코로나 확진자수 추이", subtitle = "-국내인 기준") +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold", hjust = 0.5)) +
+  theme(plot.subtitle = element_text(face="bold", hjust = 0.5)) + 
+  geom_point(data= Dat2, aes(x=confirmed_date,y=n), color ="navy") +
+  geom_text(data= Dat2, aes(x=confirmed_date,y=n, label=text), color ="navy",hjust = 1.1)
+```
+
+### 문제 1-2
+```{r}
+ggplot(Dat1,aes(x=confirmed_date, y=confirmed_number,group = province, color = province)) +
+  geom_line() +
+  facet_wrap(.~province, nrow=4)  
+```
+
+### 문제 2
+```{r}
+Dat_province <- Dat1 %>% 
+  group_by(province,state) %>% 
+  summarise(n=n())
+```
+
+```{r}
+ggplot(Dat_province, aes(x=reorder(province,n), y=n, fill= state,color=state)) +
+  geom_col(alpha=0.4) +
+  coord_flip() +
+  labs(x="지역", y="확진자 수")
+```
+
+### 문제 3
+```{r}
+ggplot(Dat_age_date, aes(x=age,y=n,group=age,color=age,fill=age)) +
+  geom_boxplot(alpha=0.5,outlier.shape = NA) +
+  stat_boxplot(geom = 'errorbar') +
+  labs(y="일단위 확진자수") +
+  theme_classic()
+```
+
+### 문제 3-2
+```{r}
+fit = lm(n~age,Dat_age_date)
+anova(fit)
+```
+
+P-value가 '8.192e-14'로 매우 작게 나와 유의 수준 0.05 하에서 귀무갈설을 기각,  
+나이대에 따라 일별 확진자 수의 평균에 차이가 있다고 할 수 있습니다.
+
+## Chapter 3
+
+### 문제 1
+```{r}
+library(MASS)
+library(corrplot)
+library(caret)
+library(MLmetrics)
+```
+
+```{r}
+boston_cor = cor(Boston)
+corrplot(boston_cor, 
+         method ="number",
+         type="upper")
+```
+
+*rad* (방사형 고속도로로의 접근성 지수)와 *tax* ($10,000당 최대 자산 가치 비율) 의 상관계수가 0.91이므로,  
+자산가치가 높을 수록 방사형 고속도로에 접근하기 더 쉬운 경향이 있다는 것을 알 수 있습니다. 
+
+*dis* (보스턴의 5개 고용 센터까지 가중치 거리) 와 *nox* (산화질소 농도)의 상관계수가 -0.77이므로,  
+보스턴 고용 센터와의 거리가 멀수록 산화질소 농도는 줄어드는 경향이 있다는 것을 알 수 있습니다.
+
+### 문제 2
+
+```{r}
+boston <- Boston %>% gather(other,val,-medv)
+ggplot(boston, aes(x=val,y=medv,group=other)) +
+  geom_point() +
+  labs(title = "Scatter plot of dependent variables vs Median Value (medv)") +
+  stat_smooth(method=lm, level=0.95, color="lightblue") +
+  theme_light() +
+  facet_wrap(.~other, ncol=4, scales="free")
+```
+
+### 문제 3
+
+```{r}
+set.seed(1234)
+train_idx <- createDataPartition(Boston$medv,p=.7 ,list=F)
+train <- Boston[train_idx,]
+test <- Boston[-train_idx,]
+```
+
+### 문제 3-2
+```{r}
+llm = lm(medv~., train)
+llm %>% summary()
+```
+
+F-statistic의 p-value가 매우 작으므로 유의미한 모형이라 할 수 있습니다.  
+*indus*와 *age*는 p-value가 매우 큰 것으로 보아 종속변수 *medv*에 유의미한 영향이 없다는 걸 알 수 있습니다.  
+*nox*가 높을 수록 *medv*가 굉장히 낮아지는 것으로 나타납니다. 
+R^2 (결정계수)가 0.735이므로 설명력은 약 70%.
+
+```{r}
+pred_llm = predict(llm,test)
+(RMSE(pred_llm,test$medv))
+```
+test 에 대한 RMSE
+
+### 문제 3-3
+
+Feature selection을 통해 필요없는 독립변수를 제거하거나 이상치가 있다면 이상치를 제거함으로써 모델의 RMSE를 줄일 수 있습니다.
+
+### 문제 4
+```{r}
+Dat_llm = llm$coefficients %>% as.data.frame
+Dat_llm = data.frame(rownames(Dat_llm),round(Dat_llm[,1],2))
+colnames(Dat_llm) <- c("Ind","value")
+```
+그래프를 그리기 위해 coefficients와 독립변수를 데이터 프레임으로 만들었습니다.
+```{r}
+palette = rep('yellow',length(Dat_llm$value))
+palette_ind = Dat_llm$value %>% order(decreasing=T)
+palette[palette_ind[1]]='red'
+palette[palette_ind[length(Dat_llm$value)]]='blue'
+```
+가장 큰 coefficeint에는 red, 가장 작은 값에는 blue, 나머지에는 yellow를 배정
+```{r}
+Dat_llm %>% ggplot(aes(x=reorder(Ind,value),y=value)) +
+  geom_bar(stat="identity",fill=palette, color= palette,alpha=0.2) +
+  coord_flip() +
+  geom_text(aes(label = value),position=position_stack(vjust=0.5)) +
+  labs(x = "independent variables") +
+  theme_classic()
+```
